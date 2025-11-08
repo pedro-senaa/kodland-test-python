@@ -2,15 +2,23 @@ import math
 import random
 from pygame import Rect
 
-WIDTH = 500
-HEIGHT = 500
+WIDTH = 1000
+HEIGHT = 1000
 running = False
+SOUNDS = False
+bullet_list = []
+enemy_list = []
+explosion_list = []
+MAX_ENEMYS = 5
 
 
 # enemy class!
 class Enemy(Actor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.SPEED = 1
+        # for handling collisions bettween other enemys
+        self.PUSH_FORCE = 0.5
         
         
         
@@ -20,13 +28,48 @@ class Enemy(Actor):
         explosion_list.append(new_explosion)
         # deletes itself
         enemy_list.remove(self)
-        print('destroyed ship')
+        
+        
+        
+    def move_to_hero(self, hero, other_enemies):
+        ###
+        ### this method creates x_move and y_move for the enemy, 
+        ### considering other enemys that might be close to the one that
+        ### this function is being ran at
+        ###
+        
+        # angles to hero always
+        self.angle = self.angle_to(hero.pos) + 90
+        
+        # creates x_move and y_move considering only hero
+        x_move, y_move = enemy_to_hero_vec(self, hero)
+        x_move *= self.SPEED
+        y_move *= self.SPEED
+        
+        # list of all collisions for checking push forces
+        enemy_collision = self.collidelistall(other_enemies)
+        if (len(enemy_collision) > 0):
+            for index in enemy_collision:
+                colliding_enemy = other_enemies[index]
+                
+                x_push = self.x - colliding_enemy.x
+                y_push = self.y - colliding_enemy.y
+                # for normalization
+                push_dist = ((x_push ** 2) + (y_push ** 2)) ** (0.5)
+                if push_dist > 0:
+                    x_move += (x_push / push_dist) * self.PUSH_FORCE
+                    y_move += (y_push / push_dist) * self.PUSH_FORCE
+        # finally moves
+        self.x += x_move
+        self.y += y_move
+        
+        pass
         
         
         
     pass
 
-# explosion!
+# explosion class!
 class Explosion(Actor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -34,11 +77,11 @@ class Explosion(Actor):
         self.current_frame = 0
         # set out to delete itself upon creation like ourselves
         clock.schedule_interval(self.next_frame, 0.1)
-        
+        if SOUNDS:
+            sounds.explosion_sound.play()
         
     def next_frame(self):
         self.current_frame += 1
-        print('running explosion')
         
         if self.current_frame < len(self.frames):
             self.image = self.frames[self.current_frame]
@@ -46,22 +89,39 @@ class Explosion(Actor):
             clock.unschedule(self.next_frame)
             if self in explosion_list:
                 explosion_list.remove(self)
-        
-
-
 
 # hero class!
 class Hero(Actor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.SPEED = 100
+        
+    def move(self, pos):
+        ### 
+        ### moves hero to position
+        ###
+        animate(self, pos=pos, duration=(self.distance_to(pos) / self.SPEED))
+        self.angle = self.angle_to(pos) + 90
+        
+    def shoot(self):
+        ###
+        ### creates two bullets
+        ###
+        bullet1 = Bullet('cannonball', pos=self.center)
+        bullet1.angle = - (self.angle - 90) 
+        bullet2 = Bullet('cannonball', pos=self.center)
+        bullet2.angle = - (self.angle + 90)
+        bullet_list.append(bullet1)
+        bullet_list.append(bullet2)
     pass
-
 
 # bullet class 
 class Bullet(Actor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.speed = 10
+        if SOUNDS:
+            sounds.shoot_sound.play()
     
     
     # for handling traveling
@@ -74,53 +134,42 @@ class Bullet(Actor):
     def hit(self, enemy):
         enemy.destroy()
         bullet_list.remove(self)
-        print('removed bullet')
-        
-        
-        
-        
-        
-        
-    
 
-    
     pass
 
 
-
-
 hero = Hero('hero', center=(WIDTH/2, HEIGHT/2))
-test_enemy = Enemy(f'enemy{random.randint(1, 3)}')
 start = Actor('buttonlong_blue', center=(WIDTH / 2, 100))
-music = Actor('buttonlong_blue', center=(WIDTH / 2, 175))
+music_button = Actor('buttonlong_blue', center=(WIDTH / 2, 175))
 exit = Actor('buttonlong_blue', center=(WIDTH / 2, 250))
 
 
 
 
 
+#### 
 #### middleware
 ####
-####
-bullet_list = []
-enemy_list = []
-explosion_list = []
-MAX_ENEMYS = 5
+
 # whenever a new enemy is to be spawned, this is called
 def spawn_enemy(): 
-    global running
-    if len(enemy_list) < MAX_ENEMYS and running:
-        new_enemy = Enemy(f'enemy{random.randint(1, 3)}', center=(random.randint(0, WIDTH), random.randint(0, HEIGHT)))
-        enemy_list.append(new_enemy)
-        print(f'{len(enemy_list)} enemys!!!!')
-    # new_enemy.draw()
-    
+    if running and len(enemy_list) < MAX_ENEMYS:
+        # random side
+        side = random.randint(0, 3)
+
+        if side == 0: # top
+            pos = (random.randint(0, WIDTH), -50)
+        elif side == 1: # right
+            pos = (WIDTH + 50, random.randint(0, HEIGHT))
+        elif side == 2: # bottom
+            pos = (random.randint(0, WIDTH), HEIGHT + 50)
+        else: # left
+            pos = (-50, random.randint(0, HEIGHT))
+
+        new_enemy = Enemy(f'enemy{random.randint(1, 3)}', center=pos)
+        enemy_list.append(new_enemy)    
     
 
-    
-    
-    
-    
 #  whenever enemy moves in direction to hero, run this function. Purpose is to normalize speed.
 def enemy_to_hero_vec(enemy, hero):
     x_vec = hero.x - enemy.x
@@ -133,28 +182,22 @@ def enemy_to_hero_vec(enemy, hero):
 
 
 ####
+#### schedules
 ####
-####
 
+# tries to spawn enemy every second
+clock.schedule_interval(spawn_enemy, 1)
 
-clock.schedule_interval(spawn_enemy, 5)
-
-
-
-
-
-    
-
-
+###
+### actions
+###
 
 def draw():
     screen.clear()
     ##### game screen
     if running:
         hero.draw()
-        test_enemy.draw()
         for enemy in enemy_list: 
-           enemy.angle = enemy.angle_to(hero) + 90
            enemy.draw()
         for bullet in bullet_list:
             bullet.draw()
@@ -167,164 +210,105 @@ def draw():
         screen.clear()
         start.draw()
         screen.draw.text('START', center=start.pos)
-        music.draw()
-        screen.draw.text('MUSIC ON', center=music.pos)
+        music_button.draw()
+        if SOUNDS:
+            screen.draw.text('MUSIC ON', center=music_button.pos)
+        else:
+            screen.draw.text('MUSIC OFF', center=music_button.pos)
         exit.draw()
         screen.draw.text('EXIT', center=exit.pos)
+        screen.draw.text('Press spacebar to shoot!', center=(WIDTH / 2, 325))
+        screen.draw.text('Move with mouse clicks', center=(WIDTH / 2, 400))
         
         
         pass
-        
-        
-    
-    
+              
 def on_mouse_down(pos, button):
+    # clicks for game running
     global running
     ## moves hero to click (found a better way to move with animate. Might change enemy movement later)
     if running:
-        
-        HERO_SPEED = 100
-        animate(hero, pos=pos, duration=(hero.distance_to(pos) / HERO_SPEED))
-        hero.angle = hero.angle_to(pos) + 90
-        # hero.pos = pos
+        hero.move(pos)
         
         pass
     
+    # clicks for menu
     else: 
         if (start.collidepoint(pos) and (button == 1)):
-            print('clicked start')
             # running = True
             start.image = 'buttonlong_blue_pressed'
-        elif (music.collidepoint(pos) and (button == 1)):
-            music.image = 'buttonlong_blue_pressed'
+        elif (music_button.collidepoint(pos) and (button == 1)):
+            music_button.image = 'buttonlong_blue_pressed'
         elif (exit.collidepoint(pos) and (button == 1)):
             exit.image = 'buttonlong_blue_pressed'
         pass
   
-  
-  
-            
-            
 def on_mouse_up(pos, button):
     global running
+    global SOUNDS
     
     if running:
         pass
+    
+    # clicks for game menu
     else:
         if (button == 1):
             start.image = 'buttonlong_blue'    
             exit.image = 'buttonlong_blue'
-            music.image = 'buttonlong_blue'
+            music_button.image = 'buttonlong_blue'
         if (start.collidepoint(pos)):
             running = True
-        elif (music.collidepoint(pos)):
+        elif (music_button.collidepoint(pos)):
+            SOUNDS = not SOUNDS
+            if SOUNDS:
+                music.play('theme') 
+            else:
+                music.stop()        
             pass # add music controlling later
         elif (exit.collidepoint(pos)):
             quit()
             
-            
-            
-            
 def on_key_down(key):
     global running
     if running:
+        ## shooting logic
         if key == keys.SPACE:
-            bullet1 = Bullet('cannonball', pos=hero.center)
-            print(hero.angle)
-            print(hero.angle - 90)
-            bullet1.angle = - (hero.angle - 90) 
-            print(bullet1.angle)
-            bullet2 = Bullet('cannonball', pos=hero.center)
-            bullet2.angle = - (hero.angle + 90)
-            bullet_list.append(bullet1)
-            bullet_list.append(bullet2)
-        
-        
-        
-        
+            hero.shoot()
         pass
     else: 
         pass
     
 def update():
     global running
-    
-    
+    global SOUNDS
+
     #### GAME IS RUNNING
     if running:
         
-        
-        ## moves bullets
+        ## bullet logic for moving and hiting enemy
         for bullet in bullet_list:
             bullet.shoot()
-            if bullet.collidelist(enemy_list) != -1:
-                enemy_to_destroy = enemy_list[bullet.collidelist(enemy_list)]
+            enemy_hit_index = bullet.collidelist(enemy_list) 
+            if enemy_hit_index != -1:
+                enemy_to_destroy = enemy_list[enemy_hit_index]
                 bullet.hit(enemy_to_destroy)
         
-        ## check for colision of hero and enemy
+        ## check for colision of hero and enemys and goes back to menu
         if hero.collidelist(enemy_list) != -1:
 
             running = False
             enemy_list.clear()
+            bullet_list.clear()
             hero.pos = (WIDTH / 2, HEIGHT / 2)
+            hero.angle = 0
         
-        
-        
-        ## angulates enemys to hero
-        for enemy in enemy_list:
-            enemy.angle = enemy.angle_to(hero) + 90
-        
-        ### moves enemys to hero
-        ENEMY_SPEED = 1
-        PUSH_FORCE = 0.5
-        
-        for i in range(len(enemy_list)):
-            # gets each enemy
-            enemy = enemy_list[i]
-            # copy of enemy list minus the one we are at
-            list_no_i = enemy_list[:]
-            list_no_i.pop(i)
-            
-            # creates move vector and already calculates distance to hero
-            x_move, y_move = enemy_to_hero_vec(enemy, hero)
-            x_move *= ENEMY_SPEED
-            y_move *= ENEMY_SPEED
-            
-            
-            # list of collisions of i-enemy
-            enemy_collision = enemy.collidelistall(list_no_i)
-            
-        
-            
-            # if there's colision, we'll have to push other enemys away
-            if (len(enemy_collision) > 0): 
-                for colliding in enemy_collision:
-                    
-                    # create push-away vector and normalizes it
-                    x_push = enemy.x - enemy_list[colliding].x
-                    y_push = enemy.y - enemy_list[colliding].y
-                    
-                    push_dist = ((x_push ** 2) + (y_push ** 2)) ** (0.5)
-                    if push_dist > 0:
-                        x_move += (x_push / push_dist) * PUSH_FORCE
-                        y_move += (y_push / push_dist) * PUSH_FORCE
-            
-            move_value = ((x_move ** 2) + (y_move) ** 2) ** (0.5)
-            # finally adds movement to enemy
-            enemy.x += x_move / move_value
-            enemy.y += y_move / move_value
+        # runs enemy movement
+        if len(enemy_list) > 0:
+            for i, enemy in enumerate(enemy_list):
+                other_enemies = enemy_list[:i] + enemy_list[i + 1:]
+                enemy.move_to_hero(hero, other_enemies)
         pass
-
-
 
     #### AT MENU
     else:         
         pass
-                
-                
-                
-                
-        
-    
-    
-            
